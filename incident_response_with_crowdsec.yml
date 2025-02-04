@@ -1,0 +1,42 @@
+definition:
+  actions:
+  - action: integrations.crowdsec.search_ip_address
+    args:
+      ip_address: ${{ TRIGGER.ip_address }}
+    depends_on: []
+    description: ''
+    for_each: null
+    join_strategy: all
+    ref: search_for_an_ip_address_using_the_cti_crowdsec_api
+    retry_policy:
+      max_attempts: 1
+      timeout: 300
+    run_if: null
+    start_delay: 0.0
+  - action: integrations.crowdsec.unblock_ip_address
+    args:
+      ip_address: ${{ TRIGGER.ip_address }}
+    depends_on:
+    - search_for_an_ip_address_using_the_cti_crowdsec_api
+    description: ''
+    for_each: null
+    join_strategy: all
+    ref: unblock_an_ip_address_in_crowdsec
+    retry_policy:
+      max_attempts: 1
+      timeout: 300
+    run_if: ${{ ACTIONS.search_for_an_ip_address_using_the_cti_crowdsec_api.result.data.reputation
+      == 'benign' }}
+    start_delay: 0.0
+  config:
+    environment: default
+    timeout: 300.0
+  description: New workflow created Jan 31, 2025, 15:46:12
+  entrypoint:
+    expects: {}
+    ref: null
+  error_handler: null
+  inputs: {}
+  returns: null
+  title: Jan 31, 2025, 15:46:12
+  triggers: []
