@@ -1,0 +1,261 @@
+created_at: '2025-05-19T09:28:58.306918Z'
+definition:
+  actions:
+  - action: core.cases.create_case
+    args:
+      description: ${{ TRIGGER.data.data.crowdsec.alert.scenario }}
+      priority: '${{ FN.lookup({ ''malicious'': ''critical'', ''suspicious'': ''high'',
+        ''known'': ''medium'', ''unknown'': ''low'' }, ACTIONS.stock_reputation.result)
+        if ACTIONS.stock_reputation.result in [''malicious'', ''suspicious'', ''known'',
+        ''unknown''] else ''unknown'' }}'
+      severity: ${{ "fatal" if ACTIONS.stock_level.result == 16 else "critical" if
+        ACTIONS.stock_level.result == 15 else "high" if ACTIONS.stock_level.result
+        >= 12 else "medium" if ACTIONS.stock_level.result >= 4 else "low" }}
+      status: new
+      summary: ${{ TRIGGER.data.agent.name }}
+    depends_on:
+    - stock_level
+    - stock_reputation
+    description: ''
+    for_each: null
+    interaction: null
+    join_strategy: all
+    ref: create_case
+    retry_policy:
+      max_attempts: 1
+      retry_until: null
+      timeout: 300
+    run_if: null
+    start_delay: 0.0
+    wait_until: null
+  - action: core.transform.reshape
+    args:
+      value: ${{ ACTIONS.create_case.result.id }}
+    depends_on:
+    - create_case
+    description: ''
+    for_each: null
+    interaction: null
+    join_strategy: all
+    ref: recup_case_id
+    retry_policy:
+      max_attempts: 1
+      retry_until: null
+      timeout: 300
+    run_if: null
+    start_delay: 0.0
+    wait_until: null
+  - action: core.transform.reshape
+    args:
+      value: ${{ TRIGGER.data.data.crowdsec.alert.source.ip }}
+    depends_on:
+    - stock_groups
+    description: ''
+    for_each: null
+    interaction: null
+    join_strategy: all
+    ref: stock_ip
+    retry_policy:
+      max_attempts: 1
+      retry_until: null
+      timeout: 300
+    run_if: ${{ 'crowdsec' in ACTIONS.stock_groups.result }}
+    start_delay: 0.0
+    wait_until: null
+  - action: tools.crowdsec.lookup_ip_address
+    args:
+      ip_address: ${{ ACTIONS.stock_ip.result }}
+    depends_on:
+    - stock_ip
+    description: ''
+    for_each: null
+    interaction: null
+    join_strategy: all
+    ref: lookup_ip_address
+    retry_policy:
+      max_attempts: 1
+      retry_until: null
+      timeout: 300
+    run_if: null
+    start_delay: 0.0
+    wait_until: null
+  - action: core.transform.reshape
+    args:
+      value: ${{ TRIGGER.data.rule.groups }}
+    depends_on: []
+    description: ''
+    for_each: null
+    interaction: null
+    join_strategy: all
+    ref: stock_groups
+    retry_policy:
+      max_attempts: 1
+      retry_until: null
+      timeout: 300
+    run_if: null
+    start_delay: 0.0
+    wait_until: null
+  - action: core.transform.reshape
+    args:
+      value: ${{ ACTIONS.lookup_ip_address.result.data.reputation }}
+    depends_on:
+    - lookup_ip_address
+    description: ''
+    for_each: null
+    interaction: null
+    join_strategy: all
+    ref: stock_reputation
+    retry_policy:
+      max_attempts: 1
+      retry_until: null
+      timeout: 300
+    run_if: null
+    start_delay: 0.0
+    wait_until: null
+  - action: core.transform.reshape
+    args:
+      value: ${{ TRIGGER.data.rule.level }}
+    depends_on:
+    - lookup_ip_address
+    description: ''
+    for_each: null
+    interaction: null
+    join_strategy: all
+    ref: stock_level
+    retry_policy:
+      max_attempts: 1
+      retry_until: null
+      timeout: 300
+    run_if: null
+    start_delay: 0.0
+    wait_until: null
+  - action: core.cases.create_comment
+    args:
+      case_id: ${{ ACTIONS.recup_case_id.result }}
+      content: ${{ ACTIONS.stock_ip.result }}
+    depends_on:
+    - create_case
+    - recup_case_id
+    description: ''
+    for_each: null
+    interaction: null
+    join_strategy: all
+    ref: comment_ip_attaker
+    retry_policy:
+      max_attempts: 1
+      retry_until: null
+      timeout: 300
+    run_if: null
+    start_delay: 0.0
+    wait_until: null
+  - action: core.transform.map
+    args:
+      items: ${{ TRIGGER.data.data.crowdsec.alert.events[0].meta }}
+      python_lambda: 'lambda m: m[''key''] + '': '' + m[''value'']'
+    depends_on:
+    - recup_case_id
+    description: ''
+    for_each: null
+    interaction: null
+    join_strategy: all
+    ref: map
+    retry_policy:
+      max_attempts: 1
+      retry_until: null
+      timeout: 300
+    run_if: null
+    start_delay: 0.0
+    wait_until: null
+  - action: core.cases.create_comment
+    args:
+      case_id: ${{ ACTIONS.recup_case_id.result }}
+      content: ${{ FN.join(ACTIONS.map.result, '\n- ') }}
+    depends_on:
+    - comment_ip_attaker
+    - map
+    description: ''
+    for_each: null
+    interaction: null
+    join_strategy: all
+    ref: comment_all_meta
+    retry_policy:
+      max_attempts: 1
+      retry_until: null
+      timeout: 300
+    run_if: null
+    start_delay: 0.0
+    wait_until: null
+  - action: core.send_email_smtp
+    args:
+      body: ${{ FN.prettify_json(ACTIONS.apply.result) }}
+      enable_ssl: true
+      recipients:
+      sender: 
+      sender_prefix: Tracecat
+      subject: Alert CrowdSec (flux wazuh)
+    depends_on:
+    - apply
+    - comment_all_meta
+    description: ''
+    for_each: null
+    interaction: null
+    join_strategy: all
+    ref: send_email_smtp
+    retry_policy:
+      max_attempts: 1
+      retry_until: null
+      timeout: 300
+    run_if: null
+    start_delay: 0.0
+    wait_until: null
+  - action: core.cases.get_case
+    args:
+      case_id: ${{ ACTIONS.recup_case_id.result }}
+    depends_on:
+    - comment_all_meta
+    description: ''
+    for_each: null
+    interaction: null
+    join_strategy: all
+    ref: get_case
+    retry_policy:
+      max_attempts: 1
+      retry_until: null
+      timeout: 300
+    run_if: null
+    start_delay: 0.0
+    wait_until: null
+  - action: core.transform.apply
+    args:
+      python_lambda: 'lambda x: {k: v for k, v in x.items() if k != ''fields''}'
+      value: ${{ ACTIONS.get_case.result }}
+    depends_on:
+    - get_case
+    description: ''
+    for_each: null
+    interaction: null
+    join_strategy: all
+    ref: apply
+    retry_policy:
+      max_attempts: 1
+      retry_until: null
+      timeout: 300
+    run_if: null
+    start_delay: 0.0
+    wait_until: null
+  config:
+    environment: default
+    timeout: 300.0
+  description: ''
+  entrypoint:
+    expects: {}
+    ref: null
+  error_handler: ''
+  inputs: {}
+  returns: null
+  title: 'Ticketing Wazuh '
+  triggers: []
+updated_at: '2025-05-19T09:28:58.307236Z'
+version: 1
+workflow_id: 53ff3b9b-5c99-403a-931d-d754d463cd8c
+workspace_id: cc402de1-7c95-416e-9be4-b5a3c932c13a
